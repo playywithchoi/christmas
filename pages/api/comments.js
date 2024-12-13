@@ -1,44 +1,79 @@
-import { MongoClient } from 'mongodb';
+import { useState, useEffect } from 'react';
 
-const client = new MongoClient(process.env.MONGODB_URI);
+export default function ChristmasPage() {
+  const [comments, setComments] = useState([]);
+  const [name, setName] = useState('');
+  const [comment, setComment] = useState('');
 
-async function connectToDatabase() {
-  try {
-    await client.connect();
-    const db = client.db(process.env.MONGODB_DB);
-    console.log("MongoDB 연결 성공");
-    return db;
-  } catch (error) {
-    console.error("MongoDB 연결 실패:", error);
-    throw new Error("DB 연결 오류");
-  }
-}
+  // 댓글 목록 가져오기
+  const fetchComments = async () => {
+    const res = await fetch('/api/comments');
+    const data = await res.json();
+    setComments(data);
+  };
 
-export default async function handler(req, res) {
-  try {
-    const db = await connectToDatabase();
-    const collection = db.collection('comments');
+  useEffect(() => {
+    fetchComments();
+  }, []);
 
-    if (req.method === 'GET') {
-      const comments = await collection.find({}).toArray();
-      console.log("댓글 목록:", comments);
-      res.status(200).json(comments);
-    } else if (req.method === 'POST') {
-      const { name, comment } = req.body;
-      if (!name || !comment) {
-        res.status(400).json({ error: '이름과 댓글은 필수 항목입니다.' });
-        return;
-      }
+  // 댓글 제출
+  const handleSubmit = async (e) => {
+    e.preventDefault();
 
-      const result = await collection.insertOne({ name, comment, createdAt: new Date() });
-      console.log("데이터 저장 성공:", result);
-      res.status(201).json({ message: '댓글 저장 성공' });
-    } else {
-      res.setHeader('Allow', ['GET', 'POST']);
-      res.status(405).end(`Method ${req.method} Not Allowed`);
+    if (!name || !comment) {
+      alert('이름과 댓글을 모두 입력해주세요.');
+      return;
     }
-  } catch (error) {
-    console.error("API 처리 중 오류:", error);
-    res.status(500).json({ error: '서버 오류' });
-  }
+
+    const res = await fetch('/api/comments', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ username: name, content: comment }),
+    });
+
+    if (res.ok) {
+      setName('');
+      setComment('');
+      fetchComments(); // 댓글 제출 후 목록 갱신
+    } else {
+      alert('댓글 제출에 실패했습니다.');
+    }
+  };
+
+  return (
+    <div>
+      <h1>크리스마스 페이지</h1>
+      <div>
+        <h2>댓글</h2>
+        <ul>
+          {comments.map((comment, index) => (
+            <li key={index}>
+              <strong>{comment.username}</strong>: {comment.content}
+            </li>
+          ))}
+        </ul>
+      </div>
+      
+      <form onSubmit={handleSubmit}>
+        <div>
+          <input
+            type="text"
+            placeholder="이름"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </div>
+        <div>
+          <textarea
+            placeholder="댓글을 입력하세요"
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+          />
+        </div>
+        <button type="submit">댓글 제출</button>
+      </form>
+    </div>
+  );
 }
