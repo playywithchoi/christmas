@@ -1,1 +1,8 @@
 .vercel
+node_modules/
+.next/
+.DS_Store
+.env
+.next/
+node_modules/
+.env

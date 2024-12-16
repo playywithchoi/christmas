@@ -1,25 +1,61 @@
-const fs = require('fs');
-const path = require('path');
+import { MongoClient } from 'mongodb';
 
-export default function handler(req, res) {
-    const commentFilePath = path.join(process.cwd(), 'comments.txt');
+// MongoDB 연결
+const client = new MongoClient(process.env.MONGODB_URI);
+
+async function connectToDatabase() {
+  try {
+    await client.connect();
+    const db = client.db(process.env.MONGODB_DB);
+    console.log("MongoDB 연결 성공");
+    return db;
+  } catch (error) {
+    console.error("MongoDB 연결 실패:", error);
+    throw new Error("DB 연결 오류");
+  }
+}
+
+export default async function handler(req, res) {
+  // CORS 설정
+  res.setHeader('Access-Control-Allow-Origin', '*');  // 모든 출처 허용 (배포 후 변경 필요)
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  // OPTIONS 요청에 대한 빠른 응답
+  if (req.method === 'OPTIONS') {
+    res.status(204).end();
+    return;
+  }
+
+  try {
+    const db = await connectToDatabase();
+    const collection = db.collection('comments');
 
     if (req.method === 'GET') {
-        fs.readFile(commentFilePath, 'utf8', (err, data) => {
-            if (err) {
-                res.status(500).json({ error: '서버 오류' });
-                return;
-            }
+      const comments = await collection.find({}).toArray();
+      console.log("댓글 목록:", comments);
+      res.status(200).json(comments);
+    } else if (req.method === 'POST') {
+      const { name, comment } = req.body;
 
-            const comments = data.trim().split('\n').map(line => {
-                const [username, content] = line.split(':');
-                return { username: username.trim(), content: content.trim() };
-            });
+      if (!name || !comment) {
+        res.status(400).json({ error: '이름과 댓글은 필수 항목입니다.' });
+        return;
+      }
 
-            res.status(200).json({ comments });
-        });
+      const result = await collection.insertOne({
+        name,
+        comment,
+        createdAt: new Date(),
+      });
+      console.log("데이터 저장 성공:", result);
+      res.status(201).json({ message: '댓글 저장 성공' });
     } else {
-        res.setHeader('Allow', ['GET']);
-        res.status(405).end(`Method ${req.method} Not Allowed`);
+      res.setHeader('Allow', ['GET', 'POST']);
+      res.status(405).end(`Method ${req.method} Not Allowed`);
     }
+  } catch (error) {
+    console.error("API 처리 중 오류:", error);
+    res.status(500).json({ error: '서버 오류' });
+  }
 }
